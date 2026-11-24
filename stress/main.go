@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/aes"
+	"crypto/hmac"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha1"
@@ -58,6 +59,8 @@ type config struct {
 	StationBase int
 	Listen      string
 	UIPassword  string
+	SSOSecret   string
+	LoginURL    string
 	VisorURL    string
 	CustodyPath string
 	CipherKey   string
@@ -118,6 +121,8 @@ func loadConfig() (*config, error) {
 		StationBase: base,
 		Listen:      get("LISTEN_ADDR", "127.0.0.1:8090"),
 		UIPassword:  get("STRESS_UI_PASSWORD", ""),
+		SSOSecret:   get("SSO_SECRET", ""),
+		LoginURL:    get("SSO_LOGIN_URL", "https://stamping.io/admin2/panel/stress.php"),
 		VisorURL:    strings.TrimRight(get("VISOR_URL", ""), "/"),
 		CustodyPath: get("CUSTODY_PATH", ""),
 		CipherKey:   get("CODE_CIPHER_KEY", ""),
@@ -133,7 +138,7 @@ func loadConfig() (*config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("LISTEN_ADDR invalida: %w", err)
 	}
-	if ip := net.ParseIP(host); (ip == nil || !ip.IsLoopback()) && host != "localhost" && cfg.UIPassword == "" {
+	if ip := net.ParseIP(host); (ip == nil || !ip.IsLoopback()) && host != "localhost" && cfg.UIPassword == "" && cfg.SSOSecret == "" {
 		return nil, fmt.Errorf("si la interfaz escucha fuera de localhost, STRESS_UI_PASSWORD es obligatoria")
 	}
 	return cfg, nil
@@ -597,7 +602,52 @@ func (r *runner) snapshotLocked() snapshot {
 
 // ─────────────────────────────── HTTP ────────────────────────────────────
 
+// ssoValid comprueba un token "base64url(email|exp).hmac" emitido por la puerta de Stamping.
+func ssoValid(secret, tok string) bool {
+	i := strings.LastIndex(tok, ".")
+	if i < 1 {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(tok[:i]))
+	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(tok[i+1:])) {
+		return false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(tok[:i])
+	if err != nil {
+		return false
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	return err == nil && time.Now().Unix() < exp
+}
+
+func ssoAuth(cfg *config, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if c, err := req.Cookie("stress_sso"); err == nil && ssoValid(cfg.SSOSecret, c.Value) {
+			next.ServeHTTP(w, req)
+			return
+		}
+		if t := req.URL.Query().Get("t"); t != "" && ssoValid(cfg.SSOSecret, t) {
+			http.SetCookie(w, &http.Cookie{Name: "stress_sso", Value: t, Path: "/", MaxAge: 8 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+			http.Redirect(w, req, req.URL.Path, http.StatusFound)
+			return
+		}
+		if strings.HasPrefix(req.URL.Path, "/api/") || strings.Contains(req.URL.Path, "/api/") {
+			writeJSON(w, 401, map[string]string{"error": "sesion de Stamping requerida"})
+			return
+		}
+		http.Redirect(w, req, cfg.LoginURL, http.StatusFound)
+	})
+}
+
 func authenticated(cfg *config, next http.Handler) http.Handler {
+	if cfg.SSOSecret != "" {
+		return ssoAuth(cfg, next)
+	}
 	if cfg.UIPassword == "" {
 		return next
 	}
