@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prueba de estrés — Stamping</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('stress_theme')||'light';}catch(e){document.documentElement.dataset.theme='light';}</script>
 <style>
-  :root { --bg:#00090c; --panel:#0c1a1f; --line:#1c3139; --text:#e8f1f3; --muted:#8fa6ad; --accent:#5f4dee; --ok:#2fb67c; --bad:#e5484d; --r:4px; }
+  :root { --bg:#f4f6f8; --panel:#ffffff; --line:#d5dde2; --text:#10222a; --muted:#5b6f77; --accent:#5f4dee; --ok:#1c9a67; --bad:#d23a40; --r:4px; --field:#f4f6f8; --sk1:#eef2f4; --sk2:#dbe3e7; --veil:rgba(16,34,42,.55); }
+  :root[data-theme="dark"] { --bg:#00090c; --panel:#0c1a1f; --line:#1c3139; --text:#e8f1f3; --muted:#8fa6ad; --ok:#2fb67c; --bad:#e5484d; --field:var(--field); --sk1:#0c1a1f; --sk2:#17303a; --veil:rgba(0,0,0,.82); }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif; }
   header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
@@ -14,7 +16,7 @@
   .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:16px 18px; }
   .row { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
   label { display:grid; gap:4px; font-size:13px; color:var(--muted); }
-  input { background:#071216; color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:9px 10px; width:150px; font:inherit; }
+  input { background:var(--field); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:9px 10px; width:150px; font:inherit; }
   button { background:var(--accent); color:#fff; border:0; border-radius:var(--r); padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; display:inline-flex; gap:8px; align-items:center; }
   button.stop { background:var(--bad); }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
@@ -22,11 +24,11 @@
   a.btn { text-decoration:none; }
   svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
   .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; }
-  .tile { background:#071216; border:1px solid var(--line); border-radius:var(--r); padding:10px 12px; }
+  .tile { background:var(--field); border:1px solid var(--line); border-radius:var(--r); padding:10px 12px; }
   .tile small { color:var(--muted); display:block; font-size:12px; }
   .tile b { font-size:22px; font-variant-numeric:tabular-nums; }
   .tile.ok b { color:var(--ok); } .tile.bad b { color:var(--bad); }
-  .bar { height:8px; background:#071216; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; }
+  .bar { height:8px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; }
   .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
@@ -34,11 +36,11 @@
   td.mono, .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
   .badge { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; padding:2px 7px; border-radius:var(--r); border:1px solid var(--line); }
   .badge.ok { color:var(--ok); border-color:var(--ok); } .badge.error { color:var(--bad); border-color:var(--bad); }
-  .skeleton { height:14px; border-radius:var(--r); background:linear-gradient(90deg,#0c1a1f,#17303a,#0c1a1f); background-size:200% 100%; animation:sk 1.2s infinite; }
+  .skeleton { height:14px; border-radius:var(--r); background:linear-gradient(90deg,var(--sk1),var(--sk2),var(--sk1)); background-size:200% 100%; animation:sk 1.2s infinite; }
   @keyframes sk { to { background-position:-200% 0; } }
   .icon-btn { background:transparent; border:1px solid var(--line); color:var(--muted); padding:4px 6px; }
   details summary { cursor:pointer; color:var(--muted); }
-  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; padding:20px; z-index:10; }
+  .overlay { position:fixed; inset:0; background:var(--veil); display:none; align-items:center; justify-content:center; padding:20px; z-index:10; }
   .overlay.on { display:flex; }
   .modal { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); width:min(560px,100%); padding:18px 20px; position:relative; }
   .modal h2 { margin:0 28px 10px 0; font-size:17px; }
@@ -52,6 +54,7 @@
   <svg viewBox="0 0 24 24" style="width:22px;height:22px;color:var(--accent)"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
   <h1>Prueba de estrés <span class="muted" id="proc"></span></h1>
   <button class="icon-btn" id="info" aria-label="Información"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+  <button class="icon-btn" id="theme" aria-label="Cambiar entre modo claro y oscuro" style="margin-left:auto"><svg viewBox="0 0 24 24" id="themeIcon"></svg></button>
 </header>
 
 <main>
@@ -137,6 +140,15 @@
     $('count').disabled = $('conc').disabled = value;
   }
 
+  const SUN='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', MOON='<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>';
+  function paintTheme() { $('themeIcon').innerHTML = document.documentElement.dataset.theme === 'dark' ? SUN : MOON; }
+  $('theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('stress_theme', t); } catch (e) {}
+    paintTheme();
+  });
+  paintTheme();
   const viaGate = true;
   const route = p => location.pathname + '?p=' + encodeURIComponent(p);
   try { $('token').value = localStorage.getItem('stress_token') || ''; } catch (e) {}
