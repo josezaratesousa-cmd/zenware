@@ -627,6 +627,10 @@ func ssoValid(secret, tok string) bool {
 
 func ssoAuth(cfg *config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if g := req.Header.Get("X-Gate-Secret"); g != "" && subtle.ConstantTimeCompare([]byte(g), []byte(cfg.SSOSecret)) == 1 {
+			next.ServeHTTP(w, req)
+			return
+		}
 		if c, err := req.Cookie("stress_sso"); err == nil && ssoValid(cfg.SSOSecret, c.Value) {
 			next.ServeHTTP(w, req)
 			return

@@ -2,8 +2,7 @@
 /**
  * Puerta de /stress (piloto Zenware): detecta la sesión de Stamping.
  * Sin sesión -> login de Stamping con retorno a esta puerta (next=stress).
- * Con sesión y usuario permitido -> emite un token firmado de corta vida y
- * vuelve a https://manyao.pe/zenware-stress/ . Archivo nuevo, no modifica el panel.
+ * Con sesión y usuario permitido -> sirve el programa de prueba (proxy a 127.0.0.1:8090). Archivo nuevo, no modifica el panel.
  * SSO_SECRET debe coincidir con el de stress.env (aquí va el valor real, no en el repo).
  */
 define('PANEL_SYSTEM', true);
@@ -12,7 +11,6 @@ require_once __DIR__ . '/includes/database.php';
 require_once __DIR__ . '/includes/auth.php';
 
 const SSO_SECRET = '__SSO_SECRET__';
-const RETURN_URL = 'https://manyao.pe/zenware-stress/';
 
 Auth::initSession();
 if (!Auth::validateFromURL()) {
@@ -30,7 +28,25 @@ if (!in_array($name, $allowed, true)) {
     exit;
 }
 
-$payload = rtrim(strtr(base64_encode($name . '|' . (time() + 8 * 3600)), '+/', '-_'), '=');
-$tok = $payload . '.' . hash_hmac('sha256', $payload, SSO_SECRET);
-header('Cache-Control: no-store');
-header('Location: ' . RETURN_URL . '?t=' . $tok);
+// Sesión válida y usuario permitido: se reenvía al programa local (127.0.0.1:8090).
+$path = isset($_GET['p']) ? ltrim((string)$_GET['p'], '/') : '';
+$qs = $_GET; unset($qs['p'], $qs['auth'], $qs['address']);
+$ch = curl_init('http://127.0.0.1:8090/' . $path . ($qs ? '?' . http_build_query($qs) : ''));
+$hdr = ['X-Gate-Secret: ' . SSO_SECRET, 'X-Stamping-User: ' . $name];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents('php://input'));
+    $hdr[] = 'Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'application/json');
+}
+curl_setopt_array($ch, [CURLOPT_HTTPHEADER => $hdr, CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HEADER => true, CURLOPT_TIMEOUT => 60]);
+$res = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$hs = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+curl_close($ch);
+if ($res === false) { http_response_code(502); echo 'Servicio no disponible.'; exit; }
+http_response_code($code ?: 502);
+foreach (explode("\r\n", substr($res, 0, $hs)) as $h) {
+    if (preg_match('/^(Content-Type|Content-Disposition|Cache-Control):/i', $h)) header($h);
+}
+echo substr($res, $hs);
