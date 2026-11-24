@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de estrés — Stamping</title>
+<style>
+  :root { --bg:#00090c; --panel:#0c1a1f; --line:#1c3139; --text:#e8f1f3; --muted:#8fa6ad; --accent:#5f4dee; --ok:#2fb67c; --bad:#e5484d; --r:4px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  main { max-width:1100px; margin:0 auto; padding:20px 24px 48px; display:grid; gap:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:16px 18px; }
+  .row { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+  label { display:grid; gap:4px; font-size:13px; color:var(--muted); }
+  input { background:#071216; color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:9px 10px; width:150px; font:inherit; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:var(--r); padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; display:inline-flex; gap:8px; align-items:center; }
+  button.stop { background:var(--bad); }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  a.btn { text-decoration:none; }
+  svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; }
+  .tile { background:#071216; border:1px solid var(--line); border-radius:var(--r); padding:10px 12px; }
+  .tile small { color:var(--muted); display:block; font-size:12px; }
+  .tile b { font-size:22px; font-variant-numeric:tabular-nums; }
+  .tile.ok b { color:var(--ok); } .tile.bad b { color:var(--bad); }
+  .bar { height:8px; background:#071216; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  td.mono, .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+  .badge { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; padding:2px 7px; border-radius:var(--r); border:1px solid var(--line); }
+  .badge.ok { color:var(--ok); border-color:var(--ok); } .badge.error { color:var(--bad); border-color:var(--bad); }
+  .skeleton { height:14px; border-radius:var(--r); background:linear-gradient(90deg,#0c1a1f,#17303a,#0c1a1f); background-size:200% 100%; animation:sk 1.2s infinite; }
+  @keyframes sk { to { background-position:-200% 0; } }
+  .icon-btn { background:transparent; border:1px solid var(--line); color:var(--muted); padding:4px 6px; }
+  details summary { cursor:pointer; color:var(--muted); }
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; padding:20px; z-index:10; }
+  .overlay.on { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); width:min(560px,100%); padding:18px 20px; position:relative; }
+  .modal h2 { margin:0 28px 10px 0; font-size:17px; }
+  .modal .x { position:absolute; top:10px; right:10px; background:transparent; color:var(--muted); padding:4px; }
+  .modal .actions { margin-top:16px; display:flex; gap:10px; justify-content:flex-end; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 24 24" style="width:22px;height:22px;color:var(--accent)"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+  <h1>Prueba de estrés <span class="muted" id="proc"></span></h1>
+  <button class="icon-btn" id="info" aria-label="Información"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+</header>
+
+<main>
+  <section class="card">
+    <div class="row">
+      <label>Cantidad de transacciones
+        <input id="count" type="number" min="1" value="100">
+      </label>
+      <label>Concurrencia
+        <input id="conc" type="number" min="1" value="20">
+      </label>
+      <button id="go"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg><span id="goText">Iniciar prueba</span></button>
+      <a class="btn" id="visorBtn" hidden target="_blank" rel="noopener"><button class="ghost" type="button"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Abrir el visor</button></a>
+      <a class="btn" id="csvBtn" href="api/report.csv" hidden><button class="ghost" type="button"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>Descargar reporte</button></a>
+    </div>
+    <p class="muted" id="msg" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="card">
+    <div class="tiles">
+      <div class="tile"><small>Enviadas</small><b id="sent">0</b></div>
+      <div class="tile ok"><small>Correctas</small><b id="ok">0</b></div>
+      <div class="tile bad"><small>Con error</small><b id="bad">0</b></div>
+      <div class="tile"><small>Transacciones por segundo</small><b id="tps">0</b></div>
+      <div class="tile"><small>Latencia p50 (ms)</small><b id="p50">0</b></div>
+      <div class="tile"><small>Latencia p95 (ms)</small><b id="p95">0</b></div>
+    </div>
+    <div class="bar" style="margin-top:14px"><i id="bar"></i></div>
+    <p class="muted" id="state" style="margin:8px 0 0"></p>
+    <details id="fails" hidden style="margin-top:8px"><summary>Errores por causa</summary><div id="failList" class="mono"></div></details>
+  </section>
+
+  <section class="card">
+    <table>
+      <thead><tr><th>Mesa</th><th>Estado</th><th>TrxID</th><th>Tiempo</th><th>Visor</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5"><div class="skeleton"></div></td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="x" id="mClose" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="mTitle"></h2>
+    <div id="mBody"></div>
+    <div class="actions" id="mActions"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const fmt = n => new Intl.NumberFormat('es-PE').format(n);
+  let cfg = { visor:false, max_count:500000, max_concurrency:200 };
+  let running = false, timer = null;
+
+  // El modal solo se cierra con la X o con sus botones: un clic fuera no lo cierra.
+  function modal(title, bodyNodes, actions) {
+    $('mTitle').textContent = title;
+    $('mBody').replaceChildren(...bodyNodes);
+    $('mActions').replaceChildren(...actions);
+    $('overlay').classList.add('on');
+  }
+  const closeModal = () => $('overlay').classList.remove('on');
+  $('mClose').onclick = closeModal;
+  const para = text => { const p = document.createElement('p'); p.textContent = text; return p; };
+  const button = (text, cls, fn) => { const b = document.createElement('button'); b.textContent = text; if (cls) b.className = cls; b.onclick = fn; return b; };
+
+  $('info').onclick = () => modal('Qué hace esta prueba', [
+    para('Genera actas electorales sintéticas con resultados aleatorios que cuadran, las sella en Stamping con la cuenta configurada y muestra el avance en vivo.'),
+    para('Cada transacción es real: descuenta un crédito de evidencias y dispara el anclaje en las redes configuradas. No es una simulación.'),
+    para('Al terminar se guarda un reporte con el resumen y el detalle de cada transacción, que sirve como evidencia de la prueba.'),
+  ], [button('Cerrar', 'ghost', closeModal)]);
+
+  function setRunning(value) {
+    running = value;
+    $('go').className = value ? 'stop' : '';
+    $('goText').textContent = value ? 'Detener' : 'Iniciar prueba';
+    $('go').querySelector('svg').innerHTML = value ? '<rect x="6" y="6" width="12" height="12"/>' : '<path d="M6 4l14 8-14 8z"/>';
+    $('count').disabled = $('conc').disabled = value;
+  }
+
+  async function api(path, options) {
+    const res = await fetch(path, options);
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, body };
+  }
+
+  async function start() {
+    const count = parseInt($('count').value, 10), conc = parseInt($('conc').value, 10);
+    if (!(count >= 1 && count <= cfg.max_count && conc >= 1 && conc <= cfg.max_concurrency)) {
+      $('msg').textContent = `La cantidad debe estar entre 1 y ${fmt(cfg.max_count)} y la concurrencia entre 1 y ${cfg.max_concurrency}.`;
+      return;
+    }
+    modal('Confirmar la prueba', [
+      para(`Se sellarán ${fmt(count)} actas reales con ${conc} conexiones en paralelo.`),
+      para('Cada una descuenta un crédito de evidencias de la cuenta y se ancla en blockchain.'),
+    ], [
+      button('Cancelar', 'ghost', closeModal),
+      button('Confirmar e iniciar', '', async () => {
+        closeModal();
+        const r = await api('api/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ count, concurrency: conc }) });
+        $('msg').textContent = r.ok ? '' : (r.body.error || 'No se pudo iniciar.');
+        poll();
+      }),
+    ]);
+  }
+
+  $('go').onclick = async () => {
+    if (running) { await api('api/stop', { method:'POST' }); return; }
+    start();
+  };
+
+  function render(s) {
+    setRunning(s.running);
+    $('sent').textContent = fmt(s.sent); $('ok').textContent = fmt(s.ok); $('bad').textContent = fmt(s.failed);
+    $('tps').textContent = s.tx_per_s.toFixed(1); $('p50').textContent = fmt(s.p50_ms); $('p95').textContent = fmt(s.p95_ms);
+    $('bar').style.width = s.total ? Math.min(100, s.sent / s.total * 100) + '%' : '0';
+    $('state').textContent = !s.run_id ? 'Sin ejecuciones todavía.'
+      : s.running ? `Ejecutando ${s.run_id}: ${fmt(s.sent)} de ${fmt(s.total)} (${s.elapsed_s.toFixed(1)} s)`
+      : `Ejecución ${s.run_id} terminada en ${s.elapsed_s.toFixed(1)} s.`;
+
+    const visor = $('visorBtn');
+    visor.hidden = !(cfg.visor && s.last_link);
+    if (!visor.hidden) visor.href = s.last_link;
+    $('csvBtn').hidden = !(s.run_id && !s.running);
+
+    const causes = Object.entries(s.failures || {});
+    $('fails').hidden = causes.length === 0;
+    $('failList').replaceChildren(...causes.map(([k, v]) => { const d = document.createElement('div'); d.textContent = `${v} × ${k}`; return d; }));
+
+    const body = $('rows');
+    if (!s.rows.length) { body.innerHTML = '<tr><td colspan="5" class="muted">Aún no hay transacciones.</td></tr>'; return; }
+    body.replaceChildren(...s.rows.map(r => {
+      const tr = document.createElement('tr');
+      const cell = (text, cls) => { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
+      cell(r.station);
+      const st = cell(''); const b = document.createElement('span'); b.className = 'badge ' + r.status; b.textContent = r.status === 'ok' ? 'correcta' : 'error'; st.appendChild(b);
+      cell(r.trxid ? r.trxid.slice(0, 16) + '…' : '', 'mono');
+      cell(r.ms + ' ms', 'mono');
+      const v = cell('');
+      if (r.link) { const a = document.createElement('a'); a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'var(--accent)'; a.textContent = 'Ver en el visor'; v.appendChild(a); }
+      else if (r.detail) { v.textContent = r.detail; v.className = 'muted'; }
+      return tr;
+    }));
+  }
+
+  async function poll() {
+    clearTimeout(timer);
+    const r = await api('api/status');
+    if (r.ok) render(r.body);
+    timer = setTimeout(poll, running ? 700 : 3000);
+  }
+
+  (async () => {
+    const c = await api('api/config');
+    if (c.ok) { cfg = c.body; $('proc').textContent = '· ' + cfg.process_code; }
+    poll();
+  })();
+})();
+</script>
+</body>
+</html>

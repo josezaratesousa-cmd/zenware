@@ -1,0 +1,6 @@
+# Nunca versionar credenciales ni resultados de ejecuciones
+.env
+.env.*
+!.env.example
+runs/
+/stress
