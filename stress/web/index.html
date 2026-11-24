@@ -60,6 +60,9 @@
       <label>Cantidad de transacciones
         <input id="count" type="number" min="1" value="100">
       </label>
+      <label>Token del API REST
+        <input id="token" type="password" autocomplete="off" placeholder="Token de la cuenta">
+      </label>
       <label>Concurrencia
         <input id="conc" type="number" min="1" value="20">
       </label>
@@ -134,8 +137,12 @@
     $('count').disabled = $('conc').disabled = value;
   }
 
+  const viaGate = location.pathname.endsWith('stress.php');
+  const route = p => viaGate ? 'stress.php?p=' + encodeURIComponent(p) : p;
+  try { $('token').value = localStorage.getItem('stress_token') || ''; } catch (e) {}
+  if (viaGate) { const c = $('csvBtn'); if (c) c.setAttribute('href', route('api/report.csv')); }
   async function api(path, options) {
-    const res = await fetch(path, options);
+    const res = await fetch(route(path), options);
     const body = await res.json().catch(() => ({}));
     return { ok: res.ok, body };
   }
@@ -146,6 +153,9 @@
       $('msg').textContent = `La cantidad debe estar entre 1 y ${fmt(cfg.max_count)} y la concurrencia entre 1 y ${cfg.max_concurrency}.`;
       return;
     }
+    const token = $('token').value.trim();
+    if (!token) { $('msg').textContent = 'Ingrese el token del API REST.'; return; }
+    try { localStorage.setItem('stress_token', token); } catch (e) {}
     modal('Confirmar la prueba', [
       para(`Se sellarán ${fmt(count)} actas reales con ${conc} conexiones en paralelo.`),
       para('Cada una descuenta un crédito de evidencias de la cuenta y se ancla en blockchain.'),
@@ -153,7 +163,7 @@
       button('Cancelar', 'ghost', closeModal),
       button('Confirmar e iniciar', '', async () => {
         closeModal();
-        const r = await api('api/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ count, concurrency: conc }) });
+        const r = await api('api/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ count, concurrency: conc, token }) });
         $('msg').textContent = r.ok ? '' : (r.body.error || 'No se pudo iniciar.');
         poll();
       }),

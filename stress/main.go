@@ -53,7 +53,6 @@ const (
 
 type config struct {
 	BaseURL     string
-	Token       string
 	ProcessCode string
 	ProcessName string
 	StationBase int
@@ -114,7 +113,6 @@ func loadConfig() (*config, error) {
 	}
 	cfg := &config{
 		BaseURL:     strings.TrimRight(get("STAMPING_BASE_URL", "https://api.stamping.io"), "/"),
-		Token:       get("STAMPING_TOKEN", ""),
 		ProcessCode: get("PROCESS_CODE", "ZW-TEST"),
 		ProcessName: get("PROCESS_NAME", "Prueba de estres Zenware"),
 		StationBase: base,
@@ -124,9 +122,6 @@ func loadConfig() (*config, error) {
 		CustodyPath: get("CUSTODY_PATH", ""),
 		CipherKey:   get("CODE_CIPHER_KEY", ""),
 		RunsDir:     get("RUNS_DIR", "./runs"),
-	}
-	if cfg.Token == "" {
-		return nil, fmt.Errorf("falta STAMPING_TOKEN en la configuracion")
 	}
 	if cfg.CipherKey != "" && len(cfg.CipherKey) != 64 {
 		return nil, fmt.Errorf("CODE_CIPHER_KEY debe tener 64 caracteres hexadecimales")
@@ -300,6 +295,7 @@ type row struct {
 }
 
 type runner struct {
+	token  string
 	cfg    *config
 	aead   cipher.AEAD
 	client *http.Client
@@ -340,9 +336,13 @@ func newRunner(cfg *config) (*runner, error) {
 	return r, nil
 }
 
-func (r *runner) start(count, workers int) error {
+func (r *runner) start(count, workers int, token string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("falta el token del API REST")
+	}
+	r.token = strings.TrimSpace(token)
 	if r.running {
 		return fmt.Errorf("ya hay una ejecucion en curso")
 	}
@@ -437,7 +437,7 @@ func (r *runner) process(ctx context.Context, runID string, n int) row {
 		return fail(err.Error())
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+r.cfg.Token)
+	req.Header.Set("Authorization", "Bearer "+r.token)
 
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -649,13 +649,14 @@ func main() {
 		var in struct {
 			Count       int `json:"count"`
 			Concurrency int `json:"concurrency"`
+			Token       string `json:"token"`
 		}
 		if err := json.NewDecoder(io.LimitReader(req.Body, 1<<12)).Decode(&in); err != nil ||
 			in.Count < 1 || in.Count > maxCount || in.Concurrency < 1 || in.Concurrency > maxConcurrency {
 			writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("cantidad entre 1 y %d, concurrencia entre 1 y %d", maxCount, maxConcurrency)})
 			return
 		}
-		if err := run.start(in.Count, in.Concurrency); err != nil {
+		if err := run.start(in.Count, in.Concurrency, in.Token); err != nil {
 			writeJSON(w, 409, map[string]string{"error": err.Error()})
 			return
 		}
