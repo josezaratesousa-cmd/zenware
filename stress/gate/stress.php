@@ -22,8 +22,8 @@ if (!Auth::validateFromURL()) {
 }
 
 $allowed = ['zenware@stamping.io', 'jose.zarate@stamping.io'];
-$u = Auth::getUser();
-$name = strtolower(trim((string)($u['userName'] ?? '')));
+$row = Database::getInstance()->fetchOne('SELECT fireUser FROM users WHERE userPass = ? LIMIT 1', [(string)Auth::getUserId()]);
+$name = strtolower(trim((string)($row->fireUser ?? '')));
 if (!in_array($name, $allowed, true)) {
     http_response_code(403);
     echo 'Acceso restringido.';
