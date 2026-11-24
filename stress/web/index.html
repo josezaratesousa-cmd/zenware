@@ -137,8 +137,8 @@
     $('count').disabled = $('conc').disabled = value;
   }
 
-  const viaGate = location.pathname.endsWith('stress.php');
-  const route = p => viaGate ? 'stress.php?p=' + encodeURIComponent(p) : p;
+  const viaGate = true;
+  const route = p => location.pathname + '?p=' + encodeURIComponent(p);
   try { $('token').value = localStorage.getItem('stress_token') || ''; } catch (e) {}
   if (viaGate) { const c = $('csvBtn'); if (c) c.setAttribute('href', route('api/report.csv')); }
   async function api(path, options) {

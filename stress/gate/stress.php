@@ -28,6 +28,12 @@ if (!in_array($name, $allowed, true)) {
     exit;
 }
 
+// Tras el login llegan address/auth en la URL: se limpia y se queda en /stress/
+if (isset($_GET['auth'])) {
+    header('Location: /stress/');
+    exit;
+}
+
 // Sesión válida y usuario permitido: se reenvía al programa local (127.0.0.1:8090).
 $path = isset($_GET['p']) ? ltrim((string)$_GET['p'], '/') : '';
 $qs = $_GET; unset($qs['p'], $qs['auth'], $qs['address']);
